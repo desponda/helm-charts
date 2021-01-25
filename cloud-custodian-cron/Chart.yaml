@@ -3,4 +3,4 @@ name: cloud-custodian-cron
 description: Cloud Custodian helm chart allowing use of cron jobs to schedule policy runs 
 type: application
 version: 0.1.0
-appVersion: 0.9.8
+appVersion: 0.9.10

@@ -1,57 +1,76 @@
+{{- range $scheduledPolicy := .Values.scheduledPolicies }}
+---
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
-  name: "{{ include "cloud-custodian-cron.fullname" . }}-{{ .Values.policyTemplate.name }}"
+  name: "{{ include "cloud-custodian-cron.fullname" $ }}-{{ $scheduledPolicy.name }}"
   labels:
-    {{- include "cloud-custodian-cron.labels" . | nindent 4 }}
+    {{- include "cloud-custodian-cron.labels" $ | nindent 4 }}
 spec:
-  concurrencyPolicy: {{ .Values.policyTemplate.concurrencyPolicy }}
-  schedule: {{ .Values.policyTemplate.schedule | quote }}
-  failedJobsHistoryLimit: {{ .Values.policyTemplate.failedJobsHistoryLimit }}
-  successfulJobsHistoryLimit: {{ .Values.policyTemplate.successfulJobsHistoryLimit }}
+{{- $concurrencyPolicies := list "Allow" "Forbid" "Replace" }}
+{{- if has $scheduledPolicy.concurrencyPolicy $concurrencyPolicies }}
+  concurrencyPolicy: {{ $scheduledPolicy.concurrencyPolicy }}
+{{- else }}
+  {{- fail "value 'concurrencyPolicy' must be one of 'Allow', 'Forbid', or 'Replace'" }}
+{{- end }}
+  schedule: {{ $scheduledPolicy.schedule | quote }}
+  failedJobsHistoryLimit: {{ $scheduledPolicy.failedJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ $scheduledPolicy.successfulJobsHistoryLimit }}
   jobTemplate:
     spec:
+      backOffLimit: 
       template:
         metadata:
-          {{- with .Values.podAnnotations }}
+          {{- with $.Values.podAnnotations }}
           annotations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           labels:
-            {{- include "cloud-custodian-cron.selectorLabels" . | nindent 12 }}
+            {{- include "cloud-custodian-cron.selectorLabels" $ | nindent 12 }}
         spec:
           volumes:
           - name: policy
             configMap:
-              name: "{{ include "cloud-custodian-cron.fullname" . }}-{{ .Values.policyTemplate.name }}"
-          {{- with .Values.imagePullSecrets }}
+              name: "{{ include "cloud-custodian-cron.fullname" $ }}-{{ $scheduledPolicy.name }}"
+          {{- with $.Values.imagePullSecrets }}
           imagePullSecrets:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          serviceAccountName: {{ include "cloud-custodian-cron.serviceAccountName" . }}
+          serviceAccountName: {{ include "cloud-custodian-cron.serviceAccountName" $ }}
           securityContext:
-            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
           containers:
-            - name: {{ .Chart.Name }}
-              securityContext:
-                {{- toYaml .Values.securityContext | nindent 16 }}
-              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-              imagePullPolicy: {{ .Values.image.pullPolicy }}
-              args: ["-v", "-s", "/home/custodian/policies.yml"]
-              volumeMounts:
-              - name: policy
-                mountPath: /home/custodian
-              resources:
-                {{- toYaml .Values.resources | nindent 16 }}
-          {{- with .Values.nodeSelector }}
+          - name: {{ $.Chart.Name }}
+            securityContext:
+              {{- toYaml $.Values.securityContext | nindent 14 }}
+            image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+            imagePullPolicy: {{ $.Values.image.pullPolicy }}
+            args: ["-v", "-s", "/home/custodian/policies.yml"]
+            {{- with $.Values.envVars }}
+            env:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            volumeMounts:
+            - name: policy
+              mountPath: /home/custodian
+            resources:
+              {{- toYaml $.Values.resources | nindent 14 }}
+          {{- with $.Values.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.affinity }}
+          {{- with $.Values.affinity }}
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.tolerations }}
+          {{- with $.Values.tolerations }}
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- $restartPolicies := list "Always" "OnFailure" "Never" }}
+          {{- if has $scheduledPolicy.restartPolicy $restartPolicies }}
+            restartPolicy: {{ $scheduledPolicy.restartPolicy}}
+          {{- else }}
+            {{- fail "value 'restartPolicy' must be one of 'Always', 'OnFailure', or 'Never'" }}
+          {{- end }}
+{{- end }}
